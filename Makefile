@@ -32,4 +32,13 @@ clean:
 	rm -f $(TARGET) $(OBJECTS) tags cscope*
 	make -C tests clean
 
+mount_f:
+	./$(TARGET) -f bb_fs.img ./mnt/
+
+mount:
+	./$(TARGET) bb_fs.img ./mnt/
+
+umount:
+	fusermount -u ./mnt
+
 .PHONY: clean

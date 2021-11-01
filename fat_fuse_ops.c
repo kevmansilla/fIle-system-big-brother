@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static int fat_fuse_mknod(const char *path, mode_t mode, dev_t dev);
+
 /* Retrieve the currently mounted FAT volume from the FUSE context. */
 static inline fat_volume get_fat_volume() {
     return fuse_get_context()->private_data;
@@ -122,6 +124,13 @@ static void fat_fuse_read_children(fat_tree_node dir_node) {
         vol->file_tree =
             fat_tree_insert(vol->file_tree, dir_node, (fat_file)l->data);
     }
+    // create fs.log
+    if(fat_tree_node_search(vol->file_tree, strdup("/fs.log")) == NULL){
+        fat_fuse_mknod("/fs.log",0,0);
+        DEBUG("fs.log does not exist"); // view message in foreground mode
+    } else {
+        DEBUG("fs.log exist");
+    }
 }
 
 /* Add entries of a directory in @fi to @buf using @filler function. */
@@ -150,7 +159,12 @@ static int fat_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     children = fat_tree_flatten_h_children(dir_node);
     child = children;
+    char *file = "fs.log";
     while (*child != NULL) {
+        //hide fs.log
+        if (strcmp((*child)->name, file) == 0) {
+            child++;
+        }
         error = (*filler)(buf, (*child)->name, NULL, 0);
         if (error != 0) {
             return -errno;
