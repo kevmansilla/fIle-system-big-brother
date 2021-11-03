@@ -31,27 +31,34 @@ static inline fat_volume get_fat_volume() {
 #define LOG_MESSAGE_SIZE 100
 #define DATE_MESSAGE_SIZE 30
 
-// static void now_to_str(char *buf) {
-//     time_t now = time(NULL);
-//     struct tm *timeinfo;
-//     timeinfo = localtime(&now);
+ static void now_to_str(char *buf) {
+    time_t now = time(NULL);
+    struct tm *timeinfo;
+    timeinfo = localtime(&now);
+    strftime(buf, DATE_MESSAGE_SIZE, "%d-%m-%Y %H:%M", timeinfo);
+}
 
-//     strftime(buf, DATE_MESSAGE_SIZE, "%d-%m-%Y %H:%M", timeinfo);
-// }
+// TODO: complete this function to log to file
+static void fat_fuse_log_activity(char *operation_type, fat_file target_file) {
+    fat_volume vol = get_fat_volume();
+    fat_file file = NULL;
+    fat_file parent = NULL;
+    
+    /* create the string  */
+    char buf[LOG_MESSAGE_SIZE] = "";
+    now_to_str(buf);
+    strcat(buf, "\t");
+    strcat(buf, getlogin());
+    strcat(buf, "\t"); 
+    strcat(buf, target_file->filepath);
+    strcat(buf, "\t");
+    strcat(buf, operation_type);
+    strcat(buf, "\n");
 
-// // TODO: complete this function to log to file
-// static void fat_fuse_log_activity(char *operation_type, fat_file target_file)
-// {
-//     char buf[LOG_MESSAGE_SIZE] = "";
-//     now_to_str(buf);
-//     strcat(buf, "\t");
-//     strcat(buf, getlogin());
-//     strcat(buf, "\t");
-//     strcat(buf, target_file->filepath);
-//     strcat(buf, "\t");
-//     strcat(buf, operation_type);
-//     strcat(buf, "\n");
-// }
+    file = fat_tree_search(vol->file_tree, strdup("/fs.log"));
+    parent = fat_tree_get_parent(fat_tree_node_search(vol->file_tree, strdup("/fs.log")));
+    fat_file_pwrite(file, buf, strlen(buf), file->dentry->file_size, parent);
+}
 
 /* Get file attributes (file descriptor version) */
 static int fat_fuse_fgetattr(const char *path, struct stat *stbuf,
@@ -188,6 +195,9 @@ static int fat_fuse_read(const char *path, char *buf, size_t size, off_t offset,
         return -errno;
     }
 
+    /* print activity read of a file */
+    fat_fuse_log_activity("read", file);
+
     return bytes_read;
 }
 
@@ -202,6 +212,10 @@ static int fat_fuse_write(const char *path, const char *buf, size_t size,
         return 0; // Nothing to write
     if (offset > file->dentry->file_size)
         return -EOVERFLOW;
+    
+    /* print activity write of a file */
+    fat_fuse_log_activity("write", file);
+    
     return fat_file_pwrite(file, buf, size, offset, parent);
 }
 
