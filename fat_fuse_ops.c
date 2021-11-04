@@ -43,20 +43,21 @@ static void fat_fuse_log_activity(char *operation_type, fat_file target_file) {
     fat_volume vol = get_fat_volume();
     fat_file file = NULL;
     fat_file parent = NULL;
-    
-    /* create the string  */
+    char *file_log = "/fs.log";
+
+    /* create the string */
     char buf[LOG_MESSAGE_SIZE] = "";
     now_to_str(buf);
     strcat(buf, "\t");
     strcat(buf, getlogin());
-    strcat(buf, "\t"); 
+    strcat(buf, "\t");
     strcat(buf, target_file->filepath);
     strcat(buf, "\t");
     strcat(buf, operation_type);
     strcat(buf, "\n");
 
-    file = fat_tree_search(vol->file_tree, strdup("/fs.log"));
-    parent = fat_tree_get_parent(fat_tree_node_search(vol->file_tree, strdup("/fs.log")));
+    file = fat_tree_search(vol->file_tree, file_log);
+    parent = fat_tree_get_parent(fat_tree_node_search(vol->file_tree, file_log));
     fat_file_pwrite(file, buf, strlen(buf), file->dentry->file_size, parent);
 }
 
@@ -125,16 +126,29 @@ static int fat_fuse_opendir(const char *path, struct fuse_file_info *fi) {
 static void fat_fuse_read_children(fat_tree_node dir_node) {
     fat_volume vol = get_fat_volume();
     fat_file dir = fat_tree_get_file(dir_node);
+    fat_file fslog = NULL;
     GList *children_list = fat_file_read_children(dir);
+    fat_tree_node file = NULL;
+    char *file_log = "/fs.log";
+
     // Add child to tree. TODO handle duplicates
     for (GList *l = children_list; l != NULL; l = l->next) {
         vol->file_tree =
             fat_tree_insert(vol->file_tree, dir_node, (fat_file)l->data);
     }
     // create fs.log
-    if(fat_tree_node_search(vol->file_tree, strdup("/fs.log")) == NULL){
-        fat_fuse_mknod("/fs.log",0,0);
+    if(fat_tree_node_search(vol->file_tree, file_log) == NULL) {
         DEBUG("fs.log does not exist"); // view message in foreground mode
+        int f = fat_fuse_mknod(file_log, 0, 0);
+        if (f == 0){
+            file = fat_tree_node_search(vol->file_tree, file_log);
+            fslog = fat_tree_get_file(file);
+            fslog->dentry->attribs = FILE_ATTRIBUTE_SYSTEM;
+            fslog->dentry->base_name[0] = 0xe5;
+            DEBUG("fs.log created");
+        } else {
+            DEBUG("Error");
+        }
     } else {
         DEBUG("fs.log exist");
     }
@@ -212,7 +226,7 @@ static int fat_fuse_write(const char *path, const char *buf, size_t size,
         return 0; // Nothing to write
     if (offset > file->dentry->file_size)
         return -EOVERFLOW;
-    
+
     /* print activity write of a file */
     fat_fuse_log_activity("write", file);
     

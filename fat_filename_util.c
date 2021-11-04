@@ -83,6 +83,16 @@ void build_filename(const u8 *src_name_p, const u8 *src_extension_p,
     unsigned name_len;
     unsigned extension_len;
     int max_length = 8;
+    char *aux = (char *)src_name_p;
+    if (*src_name_p == 0xe5) {
+        aux++;
+        if (!strcmp(aux, "s") && !strcmp((char *)src_extension_p, "log\004")) {
+            *dst_name_p = 'f';
+            dst_name_p++;
+        }
+        src_name_p++; // Deleted file, probably log file
+        max_length--;
+    }
     // Get the base name of the file or directory
     name_len = filename_len((char *)src_name_p, max_length);
     if (name_len == 0) {
@@ -120,15 +130,15 @@ void filename_from_path(char *src_name_p, u8 *base, u8 *extension) {
         base[i] = src_name_p[i];
         i++;
     } while (i < name_len && (src_name_p + i) != dot_pos);
-    if (dot_pos != NULL && i < name_len) { // There is an extension to copy
-        i++;                               // Skip dot position
+    if (dot_pos != NULL && i < name_len) {  // There is an extension to copy
+        i++; // Skip dot position
         while (src_name_p[i] != ' ' && src_name_p[i] != '\0') {
             extension[j] = src_name_p[i];
             i++;
             j++;
         }
-    }            // else: no dot => empty extension
-    if (j < 3) { // extension was too short, fill with end of string
+    } // else: no dot => empty extension
+    if (j < 3)  { // extension was too short, fill with end of string
         extension[j + 1] = '\0';
     }
 }
