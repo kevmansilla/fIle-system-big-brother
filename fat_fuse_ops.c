@@ -348,6 +348,30 @@ int fat_fuse_truncate(const char *path, off_t offset) {
     return -errno;
 }
 
+static int fat_fuse_unlink(const char *path){
+    errno = 0;
+    fat_volume vol = get_fat_volume();
+    fat_file file = NULL, parent = NULL;
+    fat_tree_node file_node = fat_tree_node_search(vol->file_tree, path);
+    file = fat_tree_get_file(file_node);
+
+    if (file_node == NULL || errno != 0) {
+        errno = ENOENT;
+        return -errno;
+    }
+    file = fat_tree_get_file(file_node);
+    if (fat_file_is_directory(file))
+        return -EISDIR;
+
+    parent = fat_tree_get_parent(file_node);
+    fat_tree_inc_num_times_opened(file_node);
+    fat_file_rm(file, parent);
+    fat_fuse_log_activity("remove", file);
+
+
+    return -errno;
+}
+
 /* Filesystem operations for FUSE.  Only some of the possible operations are
  * implemented (the rest stay as NULL pointers and are interpreted as not
  * implemented by FUSE). */
@@ -364,6 +388,7 @@ struct fuse_operations fat_fuse_operations = {
     .releasedir = fat_fuse_releasedir,
     .utime = fat_fuse_utime,
     .truncate = fat_fuse_truncate,
+    .unlink = fat_fuse_unlink,
     .write = fat_fuse_write,
 
 /* We use `struct fat_file_s's as file handles, so we do not need to

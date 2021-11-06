@@ -453,21 +453,17 @@ void fat_file_truncate(fat_file file, off_t offset, fat_file parent) {
     u32 new_num_clusters = 0, current_num_clusters = 0;
     u32 last_cluster = 0, next_cluster = 0;
 
-    current_num_clusters = max(1, fat_table_get_clusters_for_size(
-                                      file->table, file->dentry->file_size));
-    new_num_clusters =
-        max(1, fat_table_get_clusters_for_size(file->table, offset));
+    current_num_clusters = max(1, fat_table_get_clusters_for_size(file->table, file->dentry->file_size));
+    new_num_clusters = max(1, fat_table_get_clusters_for_size(file->table, offset));
 
     // Calculate how many clusters to remove
-    if (offset > file->dentry->file_size ||
-        new_num_clusters >= current_num_clusters) {
+    if (offset > file->dentry->file_size || new_num_clusters >= current_num_clusters) {
         return; // Nothing to truncate
     }
     // TODO [optional]
     // If the file size is smaller than length, bytes between the old and
     // new lengths are read as zeros.
-    last_cluster =
-        fat_table_seek_cluster(file->table, file->start_cluster, offset);
+    last_cluster = fat_table_seek_cluster(file->table, file->start_cluster, offset);
     if (errno != 0) {
         return;
     }
@@ -545,4 +541,27 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
     write_dir_entry(parent, file->dentry, file->pos_in_parent);
 
     return size - bytes_remaining;
+}
+
+void fat_file_rm(fat_file file, fat_file parent){    
+    u32 current_cluster = file->start_cluster; 
+    u32 next_cluster = 0;
+
+    while (!fat_table_is_EOC(file->table, current_cluster)) {
+        next_cluster = fat_table_get_next_cluster(file->table, current_cluster);
+        fat_table_set_next_cluster(file->table, current_cluster, FAT_CLUSTER_FREE);
+        current_cluster = next_cluster;
+    }
+
+    file->start_cluster = FAT_CLUSTER_FREE;
+
+    // Update entrance in directory
+    file->dentry->file_size = 0;
+    file->dentry->base_name[0] = 0xe5;
+    fill_dentry_time_now(file->dentry, false, true);
+    write_dir_entry(parent, file->dentry, file->pos_in_parent);
+
+
+    fat_table_print(file->table, 0, 3000);
+
 }

@@ -33,7 +33,7 @@ clean:
 	make -C tests clean
 
 mount_f:
-	./$(TARGET) -f bb_fs.img ./mnt/
+	./$(TARGET) -f -d bb_fs.img ./mnt/
 
 mount:
 	./$(TARGET) bb_fs.img ./mnt/
