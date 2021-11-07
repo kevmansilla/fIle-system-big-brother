@@ -555,13 +555,5 @@ void fat_file_rm(fat_file file, fat_file parent){
 
     file->start_cluster = FAT_CLUSTER_FREE;
 
-    // Update entrance in directory
-    file->dentry->file_size = 0;
-    file->dentry->base_name[0] = 0xe5;
-    fill_dentry_time_now(file->dentry, false, true);
-    write_dir_entry(parent, file->dentry, file->pos_in_parent);
-
-
-    fat_table_print(file->table, 0, 3000);
-
+    // fat_table_print(file->table, 0, 2000);
 }

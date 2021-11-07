@@ -178,13 +178,16 @@ static int fat_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
     }
 
-    children = fat_tree_flatten_h_children(dir_node);
+    children = fat_tree_flatten_h_children(dir_node);    
     child = children;
     char *file = "fs.log";
+    uint size_files = 0;
     while (*child != NULL) {
         //hide fs.log
+        size_files++;
         if (strcmp((*child)->name, file) == 0) {
             child++;
+            continue;
         }
         error = (*filler)(buf, (*child)->name, NULL, 0);
         if (error != 0) {
@@ -192,6 +195,7 @@ static int fat_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
         child++;
     }
+    DEBUG("THERE ARE [%u] FILES", size_files);
     return 0;
 }
 
@@ -364,10 +368,9 @@ static int fat_fuse_unlink(const char *path){
         return -EISDIR;
 
     parent = fat_tree_get_parent(file_node);
-    fat_tree_inc_num_times_opened(file_node);
-    fat_file_rm(file, parent);
-    fat_fuse_log_activity("remove", file);
 
+    fat_file_rm(file, parent);
+    vol->file_tree = fat_tree_delete(vol->file_tree, path);
 
     return -errno;
 }
