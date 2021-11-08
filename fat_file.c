@@ -492,41 +492,44 @@ void fat_file_truncate(fat_file file, off_t offset, fat_file parent) {
 
 ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
                         off_t offset, fat_file parent) {
-    u32 cluster = 0;
+    u32 cluster = 0, next_cluster = 0;
     ssize_t bytes_written_cluster = 0, bytes_remaining = size;
     ssize_t bytes_to_write_cluster = 0;
-    off_t original_offset = offset, cluster_off = 0;
+    off_t original_offset = offset, cluster_off = 0, aux_offset = 0;
 
     if (offset > file->dentry->file_size) {
         errno = EOVERFLOW;
         return 0;
     }
     // Move cluster to first cluster to write
-    cluster = fat_table_seek_cluster(file->table, file->start_cluster, offset);
-    if (errno != 0) {
-        return 0;
-    }
-
     while (bytes_remaining > 0 && !fat_table_is_EOC(file->table, cluster)) {
+        cluster = fat_table_seek_cluster(file->table, file->start_cluster, offset);
+        if (errno != 0) {
+            return 0;
+        }
+
         DEBUG("Next cluster to write %u", cluster);
         bytes_to_write_cluster = fat_table_get_cluster_remaining_bytes(
             file->table, bytes_remaining, offset);
-        cluster_off = fat_table_cluster_offset(file->table, cluster) +
-                      fat_table_mask_offset(offset, file->table);
-        bytes_written_cluster = full_pwrite(
-            file->table->fd, buf, bytes_to_write_cluster, cluster_off);
+        cluster_off = fat_table_cluster_offset(file->table, cluster) + 
+                        fat_table_mask_offset(offset, file->table);
+        bytes_written_cluster = 
+            full_pwrite(file->table->fd, buf, bytes_to_write_cluster, cluster_off);
         bytes_remaining -= bytes_written_cluster;
+
         if (bytes_written_cluster != bytes_to_write_cluster) {
             break;
         }
         buf += bytes_written_cluster; // Move pointer
         offset += bytes_written_cluster;
 
-        if (bytes_remaining > 0) {
-            cluster = fat_table_get_next_cluster(file->table, cluster);
-            if (errno != 0) {
-                break;
-            }
+        if (cluster == FAT_CLUSTER_END_OF_CHAIN) {
+            off_t aux = fat_table_bytes_per_cluster(file->table);
+            aux_offset = offset - aux;
+            cluster = fat_table_seek_cluster(file->table, file->start_cluster, aux_offset);
+            next_cluster = fat_table_get_next_free_cluster(file->table); //primer cluster libre
+            fat_table_set_next_cluster(file->table, cluster, next_cluster); //lo vinculo con cluster
+            fat_table_set_next_cluster(file->table, next_cluster, FAT_CLUSTER_END_OF_CHAIN); //marco new_cluster como EOC
         }
     }
 
@@ -543,8 +546,8 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
     return size - bytes_remaining;
 }
 
-void fat_file_rm(fat_file file, fat_file parent){    
-    u32 current_cluster = file->start_cluster; 
+void fat_file_unlink(fat_file file, fat_file parent) {
+    u32 current_cluster = file->start_cluster;
     u32 next_cluster = 0;
 
     while (!fat_table_is_EOC(file->table, current_cluster)) {
@@ -553,7 +556,8 @@ void fat_file_rm(fat_file file, fat_file parent){
         current_cluster = next_cluster;
     }
 
-    file->start_cluster = FAT_CLUSTER_FREE;
-
-    // fat_table_print(file->table, 0, 2000);
+    set_first_cluster(file->dentry, FAT_CLUSTER_FREE);
+    file->dentry->file_size = 0;
+    file->dentry->base_name[0] = 0xe5;
+    write_dir_entry(parent, file->dentry, file->pos_in_parent);
 }

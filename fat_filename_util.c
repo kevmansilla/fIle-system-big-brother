@@ -83,13 +83,7 @@ void build_filename(const u8 *src_name_p, const u8 *src_extension_p,
     unsigned name_len;
     unsigned extension_len;
     int max_length = 8;
-    char *aux = (char *)src_name_p;
     if (*src_name_p == 0xe5) {
-        aux++;
-        if (!strcmp(aux, "s") && !strcmp((char *)src_extension_p, "log\004")) {
-            *dst_name_p = 'f';
-            dst_name_p++;
-        }
         src_name_p++; // Deleted file, probably log file
         max_length--;
     }

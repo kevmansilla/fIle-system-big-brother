@@ -129,6 +129,7 @@ static void fat_fuse_read_children(fat_tree_node dir_node) {
     fat_file fslog = NULL;
     GList *children_list = fat_file_read_children(dir);
     fat_tree_node file = NULL;
+    fat_file parent = NULL;
     char *file_log = "/fs.log";
 
     // Add child to tree. TODO handle duplicates
@@ -143,8 +144,11 @@ static void fat_fuse_read_children(fat_tree_node dir_node) {
         if (f == 0){
             file = fat_tree_node_search(vol->file_tree, file_log);
             fslog = fat_tree_get_file(file);
+            parent = fat_tree_get_parent(file);
             fslog->dentry->attribs = FILE_ATTRIBUTE_SYSTEM;
+            memmove(fslog->dentry->base_name + 1, fslog->dentry->base_name, 2);
             fslog->dentry->base_name[0] = 0xe5;
+            fat_file_pwrite(fslog, "", 0, 0, parent);
             DEBUG("fs.log created");
         } else {
             DEBUG("Error");
@@ -352,12 +356,11 @@ int fat_fuse_truncate(const char *path, off_t offset) {
     return -errno;
 }
 
-static int fat_fuse_unlink(const char *path){
+static int fat_fuse_unlink(const char *path) {
     errno = 0;
     fat_volume vol = get_fat_volume();
     fat_file file = NULL, parent = NULL;
     fat_tree_node file_node = fat_tree_node_search(vol->file_tree, path);
-    file = fat_tree_get_file(file_node);
 
     if (file_node == NULL || errno != 0) {
         errno = ENOENT;
@@ -369,7 +372,7 @@ static int fat_fuse_unlink(const char *path){
 
     parent = fat_tree_get_parent(file_node);
 
-    fat_file_rm(file, parent);
+    fat_file_unlink(file, parent);
     vol->file_tree = fat_tree_delete(vol->file_tree, path);
 
     return -errno;
