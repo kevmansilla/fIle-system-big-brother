@@ -199,7 +199,7 @@ static int fat_fuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
         child++;
     }
-    DEBUG("THERE ARE [%u] FILES", size_files);
+    // DEBUG("THERE ARE [%u] FILES", size_files);
     return 0;
 }
 

@@ -338,12 +338,13 @@ static bool is_end_of_directory(const fat_dir_entry disk_dentry) {
 static bool ignore_dentry(const fat_dir_entry disk_dentry) {
     // Note: VFAT entries have FILE_ATTRIBUTE_VOLUME set, so they will be
     // correctly ignored by this long-name unaware code.
-    if (disk_dentry->base_name[0] == 0xe5 && (disk_dentry->attribs & FILE_ATTRIBUTE_SYSTEM)) {
-        return false;
-    }
     return (disk_dentry->attribs & (FILE_ATTRIBUTE_VOLUME)) ||
            !file_basename_valid(disk_dentry->base_name) ||
            !file_extension_valid(disk_dentry->extension);
+}
+
+static bool ignore_log(const fat_dir_entry disk_dentry) {
+    return disk_dentry->base_name[0] == 0xe5 && (disk_dentry->attribs == FILE_ATTRIBUTE_SYSTEM);
 }
 
 /* Fills @elems with the fat_dir_entry that's read form @buffer, and
@@ -361,7 +362,7 @@ static void read_cluster_dir_entries(u8 *buffer, fat_dir_entry end_ptr,
             dir->children_read = 1;
             break;
         }
-        if (ignore_dentry(disk_dentry_ptr)) {
+        if (ignore_dentry(disk_dentry_ptr) && !ignore_log(disk_dentry_ptr)) {
             continue;
         }
         // Create and fill new child structure
