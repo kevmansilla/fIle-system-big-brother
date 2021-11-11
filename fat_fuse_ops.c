@@ -371,7 +371,6 @@ static int fat_fuse_unlink(const char *path) {
         return -EISDIR;
 
     parent = fat_tree_get_parent(file_node);
-
     fat_file_unlink(file, parent);
     vol->file_tree = fat_tree_delete(vol->file_tree, path);
 
