@@ -57,8 +57,35 @@ static void fat_fuse_log_activity(char *operation_type, fat_file target_file) {
     strcat(buf, "\n");
 
     file = fat_tree_search(vol->file_tree, file_log);
-    parent = fat_tree_get_parent(fat_tree_node_search(vol->file_tree, file_log));
+    parent =
+        fat_tree_get_parent(fat_tree_node_search(vol->file_tree, file_log));
     fat_file_pwrite(file, buf, strlen(buf), file->dentry->file_size, parent);
+}
+
+static void create_fslog() {
+    fat_volume vol = get_fat_volume();
+    fat_file fslog = NULL, parent = NULL;
+    fat_tree_node file = NULL;
+    char *file_log = "/fs.log";
+
+    if (fat_tree_node_search(vol->file_tree, file_log) == NULL) {
+        DEBUG("fs.log does not exist"); // view message in foreground mode
+        int check = fat_fuse_mknod(file_log, 0, 0);
+        if (check == 0) {
+            file = fat_tree_node_search(vol->file_tree, file_log);
+            fslog = fat_tree_get_file(file);
+            parent = fat_tree_get_parent(file);
+            fslog->dentry->attribs = FILE_ATTRIBUTE_SYSTEM;
+            memmove(fslog->dentry->base_name + 1, fslog->dentry->base_name, 2);
+            fslog->dentry->base_name[0] = FAT_FILENAME_DELETED_CHAR;
+            fat_file_pwrite(fslog, "", 0, 0, parent);
+            DEBUG("fs.log created");
+        } else {
+            DEBUG("Error");
+        }
+    } else {
+        DEBUG("fs.log exist");
+    }
 }
 
 /* Get file attributes (file descriptor version) */
@@ -126,11 +153,7 @@ static int fat_fuse_opendir(const char *path, struct fuse_file_info *fi) {
 static void fat_fuse_read_children(fat_tree_node dir_node) {
     fat_volume vol = get_fat_volume();
     fat_file dir = fat_tree_get_file(dir_node);
-    fat_file fslog = NULL;
     GList *children_list = fat_file_read_children(dir);
-    fat_tree_node file = NULL;
-    fat_file parent = NULL;
-    char *file_log = "/fs.log";
 
     // Add child to tree. TODO handle duplicates
     for (GList *l = children_list; l != NULL; l = l->next) {
@@ -138,24 +161,7 @@ static void fat_fuse_read_children(fat_tree_node dir_node) {
             fat_tree_insert(vol->file_tree, dir_node, (fat_file)l->data);
     }
     // create fs.log
-    if(fat_tree_node_search(vol->file_tree, file_log) == NULL) {
-        DEBUG("fs.log does not exist"); // view message in foreground mode
-        int f = fat_fuse_mknod(file_log, 0, 0);
-        if (f == 0){
-            file = fat_tree_node_search(vol->file_tree, file_log);
-            fslog = fat_tree_get_file(file);
-            parent = fat_tree_get_parent(file);
-            fslog->dentry->attribs = FILE_ATTRIBUTE_SYSTEM;
-            memmove(fslog->dentry->base_name + 1, fslog->dentry->base_name, 2);
-            fslog->dentry->base_name[0] = 0xe5;
-            fat_file_pwrite(fslog, "", 0, 0, parent);
-            DEBUG("fs.log created");
-        } else {
-            DEBUG("Error");
-        }
-    } else {
-        DEBUG("fs.log exist");
-    }
+    create_fslog();
 }
 
 /* Add entries of a directory in @fi to @buf using @filler function. */
@@ -219,7 +225,6 @@ static int fat_fuse_read(const char *path, char *buf, size_t size, off_t offset,
 
     /* print activity read of a file */
     fat_fuse_log_activity("read", file);
-
     return bytes_read;
 }
 
@@ -237,7 +242,6 @@ static int fat_fuse_write(const char *path, const char *buf, size_t size,
 
     /* print activity write of a file */
     fat_fuse_log_activity("write", file);
-    
     return fat_file_pwrite(file, buf, size, offset, parent);
 }
 

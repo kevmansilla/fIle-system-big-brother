@@ -343,8 +343,11 @@ static bool ignore_dentry(const fat_dir_entry disk_dentry) {
            !file_extension_valid(disk_dentry->extension);
 }
 
+/* Returns %true iff the filesystem driver should ignore the given directory
+ * entry */
 static bool ignore_log(const fat_dir_entry disk_dentry) {
-    return disk_dentry->base_name[0] == 0xe5 && (disk_dentry->attribs == FILE_ATTRIBUTE_SYSTEM);
+    return (disk_dentry->base_name[0] == FAT_FILENAME_DELETED_CHAR) &&
+           (disk_dentry->attribs == FILE_ATTRIBUTE_SYSTEM);
 }
 
 /* Fills @elems with the fat_dir_entry that's read form @buffer, and
@@ -527,10 +530,15 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
         if (cluster == FAT_CLUSTER_END_OF_CHAIN) {
             off_t aux = fat_table_bytes_per_cluster(file->table);
             aux_offset = offset - aux;
-            cluster = fat_table_seek_cluster(file->table, file->start_cluster, aux_offset);
-            next_cluster = fat_table_get_next_free_cluster(file->table); //primer cluster libre
-            fat_table_set_next_cluster(file->table, cluster, next_cluster); //lo vinculo con cluster
-            fat_table_set_next_cluster(file->table, next_cluster, FAT_CLUSTER_END_OF_CHAIN); //marco new_cluster como EOC
+            cluster = fat_table_seek_cluster(file->table, file->start_cluster,
+                                             aux_offset);
+            next_cluster = fat_table_get_next_free_cluster(
+                file->table); // first free cluster
+            fat_table_set_next_cluster(file->table, cluster,
+                                       next_cluster); // I link it with cluster
+            fat_table_set_next_cluster(
+                file->table, next_cluster,
+                FAT_CLUSTER_END_OF_CHAIN); // new_cluster framework as EOC
         }
     }
 
@@ -553,12 +561,13 @@ void fat_file_unlink(fat_file file, fat_file parent) {
 
     while (!fat_table_is_EOC(file->table, current_cluster)) {
         next_cluster = fat_table_get_next_cluster(file->table, current_cluster);
-        fat_table_set_next_cluster(file->table, current_cluster, FAT_CLUSTER_FREE);
+        fat_table_set_next_cluster(file->table, current_cluster,
+                                   FAT_CLUSTER_FREE);
         current_cluster = next_cluster;
     }
 
     set_first_cluster(file->dentry, FAT_CLUSTER_FREE);
     file->dentry->file_size = 0;
-    file->dentry->base_name[0] = 0xe5;
+    file->dentry->base_name[0] = FAT_FILENAME_DELETED_CHAR;
     write_dir_entry(parent, file->dentry, file->pos_in_parent);
 }
