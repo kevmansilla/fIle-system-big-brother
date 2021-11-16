@@ -457,17 +457,21 @@ void fat_file_truncate(fat_file file, off_t offset, fat_file parent) {
     u32 new_num_clusters = 0, current_num_clusters = 0;
     u32 last_cluster = 0, next_cluster = 0;
 
-    current_num_clusters = max(1, fat_table_get_clusters_for_size(file->table, file->dentry->file_size));
-    new_num_clusters = max(1, fat_table_get_clusters_for_size(file->table, offset));
+    current_num_clusters = max(1, fat_table_get_clusters_for_size(
+                                      file->table, file->dentry->file_size));
+    new_num_clusters =
+        max(1, fat_table_get_clusters_for_size(file->table, offset));
 
     // Calculate how many clusters to remove
-    if (offset > file->dentry->file_size || new_num_clusters >= current_num_clusters) {
+    if (offset > file->dentry->file_size ||
+        new_num_clusters >= current_num_clusters) {
         return; // Nothing to truncate
     }
     // TODO [optional]
     // If the file size is smaller than length, bytes between the old and
     // new lengths are read as zeros.
-    last_cluster = fat_table_seek_cluster(file->table, file->start_cluster, offset);
+    last_cluster =
+        fat_table_seek_cluster(file->table, file->start_cluster, offset);
     if (errno != 0) {
         return;
     }
@@ -496,7 +500,8 @@ void fat_file_truncate(fat_file file, off_t offset, fat_file parent) {
 
 ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
                         off_t offset, fat_file parent) {
-    u32 cluster = 0, next_cluster = 0;
+    u32 cluster = 0;
+    u32 next_cluster = 0;
     ssize_t bytes_written_cluster = 0, bytes_remaining = size;
     ssize_t bytes_to_write_cluster = 0;
     off_t original_offset = offset, cluster_off = 0, aux_offset = 0;
@@ -506,8 +511,18 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
         return 0;
     }
     // Move cluster to first cluster to write
-    while (bytes_remaining > 0 && !fat_table_is_EOC(file->table, cluster)) {
+    while (bytes_remaining > 0) {
         cluster = fat_table_seek_cluster(file->table, file->start_cluster, offset);
+
+        if (cluster == FAT_CLUSTER_END_OF_CHAIN) {
+            aux_offset = offset - fat_table_bytes_per_cluster(file->table);
+            cluster = fat_table_seek_cluster(file->table, file->start_cluster, aux_offset);
+            
+            next_cluster = fat_table_get_next_free_cluster(file->table); // first free cluster
+            fat_table_set_next_cluster(file->table, cluster, next_cluster); // I link it with cluster
+            fat_table_set_next_cluster(file->table, next_cluster, FAT_CLUSTER_END_OF_CHAIN); // new_cluster framework as EOC
+        }
+        
         if (errno != 0) {
             return 0;
         }
@@ -515,10 +530,10 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
         DEBUG("Next cluster to write %u", cluster);
         bytes_to_write_cluster = fat_table_get_cluster_remaining_bytes(
             file->table, bytes_remaining, offset);
-        cluster_off = fat_table_cluster_offset(file->table, cluster) + 
-                        fat_table_mask_offset(offset, file->table);
-        bytes_written_cluster = 
-            full_pwrite(file->table->fd, buf, bytes_to_write_cluster, cluster_off);
+        cluster_off = fat_table_cluster_offset(file->table, cluster) +
+                      fat_table_mask_offset(offset, file->table);
+        bytes_written_cluster = full_pwrite(
+            file->table->fd, buf, bytes_to_write_cluster, cluster_off);
         bytes_remaining -= bytes_written_cluster;
 
         if (bytes_written_cluster != bytes_to_write_cluster) {
@@ -526,25 +541,11 @@ ssize_t fat_file_pwrite(fat_file file, const void *buf, size_t size,
         }
         buf += bytes_written_cluster; // Move pointer
         offset += bytes_written_cluster;
-
-        if (cluster == FAT_CLUSTER_END_OF_CHAIN) {
-            off_t aux = fat_table_bytes_per_cluster(file->table);
-            aux_offset = offset - aux;
-            cluster = fat_table_seek_cluster(file->table, file->start_cluster,
-                                             aux_offset);
-            next_cluster = fat_table_get_next_free_cluster(
-                file->table); // first free cluster
-            fat_table_set_next_cluster(file->table, cluster,
-                                       next_cluster); // I link it with cluster
-            fat_table_set_next_cluster(
-                file->table, next_cluster,
-                FAT_CLUSTER_END_OF_CHAIN); // new_cluster framework as EOC
-        }
     }
 
     // Update new file size
     if (original_offset + size - bytes_remaining > file->dentry->file_size) {
-        file->dentry->file_size = offset + size - bytes_remaining;
+        file->dentry->file_size = original_offset + size - bytes_remaining;
     }
     // TODO if this operation fails, then the FAT table and the file's parent
     // entry are left on an incosistent state. FIXME
