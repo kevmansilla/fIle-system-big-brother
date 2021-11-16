@@ -359,20 +359,23 @@ static void read_cluster_dir_entries(u8 *buffer, fat_dir_entry end_ptr,
                                      fat_file dir, GList **elems) {
     fat_dir_entry disk_dentry_ptr = NULL;
     u32 dir_entries_processed = 0;
-    for (disk_dentry_ptr = (fat_dir_entry)buffer; disk_dentry_ptr <= end_ptr;
+    for (disk_dentry_ptr = (fat_dir_entry)buffer;
+         disk_dentry_ptr <= end_ptr;
          disk_dentry_ptr++, dir_entries_processed++) {
+        dir->dir.nentries = dir_entries_processed;
         if (is_end_of_directory(disk_dentry_ptr)) {
             dir->children_read = 1;
             break;
         }
+
         if (ignore_dentry(disk_dentry_ptr) && !ignore_log(disk_dentry_ptr)) {
             continue;
         }
+        
         // Create and fill new child structure
         fat_dir_entry new_entry = init_direntry_from_buff(disk_dentry_ptr);
         fat_file child = init_file_from_dentry(new_entry, dir);
         (*elems) = g_list_append((*elems), child);
-        dir->dir.nentries = dir_entries_processed;
     }
 }
 
